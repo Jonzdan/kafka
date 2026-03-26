@@ -47,8 +47,6 @@ public class KafkaProducerMetrics implements AutoCloseable {
     private final Sensor abortTxnSensor;
     private final Sensor prepareTxnSensor;
     private final Sensor metadataWaitSensor;
-    private final Sensor retryBackoffSensor;
-    private final Sensor retryAttemptsSensor;
 
     public KafkaProducerMetrics(Metrics metrics) {
         this.metrics = metrics;
@@ -85,19 +83,8 @@ public class KafkaProducerMetrics implements AutoCloseable {
             METADATA_WAIT,
             "Total time producer has spent waiting on topic metadata in nanoseconds."
         );
-
-        retryBackoffSensor = newLatencySensor(
-            "retry-backoff",
-            "Total time producer spent backing off retries."
-        );
-
-        retryAttemptsSensor = newLatencySensor(
-            "retry-attempts",
-            "Total retry attempts."
-        );
     }
 
-    // TODO: update with new removal of metric
     @Override
     public void close() {
         removeMetric(FLUSH);
@@ -140,14 +127,6 @@ public class KafkaProducerMetrics implements AutoCloseable {
 
     public void recordMetadataWait(long duration) {
         metadataWaitSensor.record(duration);
-    }
-
-    public void recordRetryBackoff(long duration) {
-        retryBackoffSensor.record(duration);
-    }
-
-    public void recordRetryAttempt(int attempt) {
-        retryAttemptsSensor.record(attempt);
     }
 
     private Sensor newLatencySensor(String name, String description) {
