@@ -364,6 +364,12 @@ public class ProducerConfig extends AbstractConfig {
     private static final String TRANSACTION_TWO_PHASE_COMMIT_ENABLE_DOC = "If set to true, then the broker is informed that the client is participating in " +
             "two phase commit protocol and transactions that this client starts never expire.";
 
+    // CsvMetricsReporter config keys
+    public static final String CSV_METRICS_OUTPUT_DIR_CONFIG    = "csv.metrics.output.dir";
+    public static final String CSV_METRICS_INTERVAL_MS_CONFIG   = "csv.metrics.interval.ms";
+    public static final String CSV_METRICS_PRODUCER_ID_CONFIG   = "csv.metrics.producer.id";
+    public static final String CSV_METRICS_RETRY_STRATEGY_CONFIG = "csv.metrics.retry.strategy";
+    
     /**
      * <code>security.providers</code>
      */
@@ -563,7 +569,28 @@ public class ProducerConfig extends AbstractConfig {
                                         List.of(),
                                         ConfigDef.ValidList.anyNonDuplicateValues(true, false),
                                         ConfigDef.Importance.LOW,
-                                        CONFIG_PROVIDERS_DOC);
+                                        CONFIG_PROVIDERS_DOC)
+                                .define(CSV_METRICS_OUTPUT_DIR_CONFIG,
+                                        Type.STRING,
+                                        "/tmp/kafka-metrics",
+                                        Importance.LOW,
+                                        "Directory where CsvMetricsReporter writes output files.")
+                                .define(CSV_METRICS_INTERVAL_MS_CONFIG,
+                                        Type.LONG,
+                                        500L,
+                                        atLeast(1L),
+                                        Importance.LOW,
+                                        "How often in milliseconds CsvMetricsReporter flushes a row.")
+                                .define(CSV_METRICS_PRODUCER_ID_CONFIG,
+                                        Type.STRING,
+                                        "producer-unknown",
+                                        Importance.LOW,
+                                        "Label written into every CSV row to identify this producer instance.")
+                                .define(CSV_METRICS_RETRY_STRATEGY_CONFIG,
+                                        Type.STRING,
+                                        "default",
+                                        Importance.LOW,
+                                        "Label written into every CSV row identifying the retry strategy under test.");
     }
 
     @Override
