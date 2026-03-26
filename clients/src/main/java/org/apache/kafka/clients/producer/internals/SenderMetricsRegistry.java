@@ -53,6 +53,10 @@ public class SenderMetricsRegistry {
     public final MetricName recordSizeMax;
     public final MetricName recordSizeAvg;
     public final MetricName requestsInFlight;
+    public final MetricName retryBackoffAvg;
+    public final MetricName retryBackoffMax;
+    public final MetricName retryAttemptsAvg;
+    public final MetricName retryAmplification;
     public final MetricName metadataAge;
     public final MetricName batchSplitRate;
     public final MetricName batchSplitTotal;
@@ -113,6 +117,14 @@ public class SenderMetricsRegistry {
                 "The average record size");
         this.requestsInFlight = createMetricName("requests-in-flight",
                 "The current number of in-flight requests awaiting a response.");
+        this.retryBackoffAvg = createMetricName("retry-backoff-avg",
+            "Average retry backoff duration in ms.");
+        this.retryBackoffMax = createMetricName("retry-backoff-max",
+            "Maximum retry backoff duration in ms.");
+        this.retryAttemptsAvg = createMetricName("retry-attempts-avg",
+            "Average retry attempts per successful record.");
+        this.retryAmplification = createMetricName("retry-amplification-factor",
+            "Total retries divided by successful sends.");
         this.metadataAge = createMetricName("metadata-age",
                 "The age in seconds of the current producer metadata being used.");
         this.batchSplitRate = createMetricName("batch-split-rate", 
@@ -196,6 +208,7 @@ public class SenderMetricsRegistry {
     public MetricName topicRecordErrorTotal(Map<String, String> tags) {
         return this.metrics.metricInstance(this.topicRecordErrorTotal, tags);
     }
+ 
 
     public List<MetricNameTemplate> allTemplates() {
         return allTemplates;

@@ -20,6 +20,7 @@ import org.apache.kafka.clients.ApiVersions;
 import org.apache.kafka.clients.ClientUtils;
 import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.KafkaClient;
+import org.apache.kafka.clients.KafkaClientWithQueueDepth;
 import org.apache.kafka.clients.consumer.ConsumerGroupMetadata;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -349,7 +350,8 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                   Serializer<K> keySerializer,
                   Serializer<V> valueSerializer,
                   ProducerMetadata metadata,
-                  KafkaClient kafkaClient,
+                  // Potential ERROR
+                  KafkaClientWithQueueDepth kafkaClient,
                   ProducerInterceptors<K, V> interceptors,
                   ApiVersions apiVersions,
                   Time time) {
@@ -527,6 +529,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
         int requestTimeoutMs = producerConfig.getInt(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG);
         ProducerMetrics metricsRegistry = new ProducerMetrics(this.metrics);
         Sensor throttleTimeSensor = Sender.throttleTimeSensor(metricsRegistry.senderMetrics);
+        // START HERE NEXT TIME
         KafkaClient client = kafkaClient != null ? kafkaClient : ClientUtils.createNetworkClient(producerConfig,
                 this.metrics,
                 "producer",

@@ -19,10 +19,16 @@ package org.apache.kafka.clients.producer.internals;
 import org.apache.kafka.clients.ClientRequest;
 import org.apache.kafka.clients.ClientResponse;
 import org.apache.kafka.clients.KafkaClient;
+import org.apache.kafka.clients.KafkaClientWithQueueDepth;
 import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.MetadataSnapshot;
 import org.apache.kafka.clients.NetworkClientUtils;
 import org.apache.kafka.clients.RequestCompletionHandler;
+import org.apache.kafka.clients.producer.internals.ProducerBatch;
+import org.apache.kafka.clients.producer.internals.ProducerMetadata;
+import org.apache.kafka.clients.producer.internals.RecordAccumulator;
+import org.apache.kafka.clients.producer.internals.SenderMetricsRegistry;
+import org.apache.kafka.clients.producer.internals.TransactionManager;
 import org.apache.kafka.common.InvalidRecordException;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.MetricName;
@@ -69,6 +75,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -119,12 +126,16 @@ public class Sender implements Runnable {
     /* The max time to wait before retrying a request which has failed */
     private final long retryBackoffMs;
 
+    private final AtomicLong retryCount;
+    private final AtomicLong successCount;
+
     /* all the state related to transactions, in particular the producer id, producer epoch, and sequence numbers */
     private final TransactionManager transactionManager;
 
     // A per-partition queue of batches ordered by creation time for tracking the in-flight batches
     private final Map<TopicPartition, List<ProducerBatch>> inFlightBatches;
 
+    /* TODO: Might have issues with existing infra calling Sender with narrower subtype of KafkaClient */
     public Sender(LogContext logContext,
                   KafkaClient client,
                   ProducerMetadata metadata,
@@ -151,6 +162,8 @@ public class Sender implements Runnable {
         this.sensors = new SenderMetrics(metricsRegistry, metadata, client, time);
         this.requestTimeoutMs = requestTimeoutMs;
         this.retryBackoffMs = retryBackoffMs;
+        this.successCount = new AtomicLong(0);
+        this.retryCount = new AtomicLong(0);
         this.transactionManager = transactionManager;
         this.inFlightBatches = new HashMap<>();
     }
@@ -984,7 +997,7 @@ public class Sender implements Runnable {
         public final Sensor compressionRateSensor;
         public final Sensor maxRecordSizeSensor;
         public final Sensor batchSplitSensor;
-        private final SenderMetricsRegistry metrics;
+        protected final SenderMetricsRegistry metrics;
         private final Time time;
 
         public SenderMetrics(SenderMetricsRegistry metrics, Metadata metadata, KafkaClient client, Time time) {
@@ -1101,6 +1114,7 @@ public class Sender implements Runnable {
             }
         }
 
+        // TODO: add sensors for new retry metrics
         public void recordRetries(String topic, int count) {
             long now = time.milliseconds();
             this.retrySensor.record(count, now);
@@ -1134,7 +1148,7 @@ public class Sender implements Runnable {
             this.batchSplitSensor.record();
         }
     }
-
+    
     public static class SenderThread extends KafkaThread {
 
         public SenderThread(final String name, Runnable runnable, boolean daemon) {
