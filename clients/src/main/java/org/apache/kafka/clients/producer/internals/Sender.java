@@ -23,6 +23,8 @@ import org.apache.kafka.clients.Metadata;
 import org.apache.kafka.clients.MetadataSnapshot;
 import org.apache.kafka.clients.NetworkClientUtils;
 import org.apache.kafka.clients.RequestCompletionHandler;
+import org.apache.kafka.clients.producer.internals.ProducerBatch;
+import org.apache.kafka.clients.producer.internals.SenderMetricsRegistry;
 import org.apache.kafka.common.InvalidRecordException;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.MetricName;
@@ -45,6 +47,8 @@ import org.apache.kafka.common.metrics.Sensor;
 import org.apache.kafka.common.metrics.stats.Avg;
 import org.apache.kafka.common.metrics.stats.Max;
 import org.apache.kafka.common.metrics.stats.Meter;
+import org.apache.kafka.common.metrics.stats.Percentile;
+import org.apache.kafka.common.metrics.stats.Percentiles;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.internal.MemoryRecords;
 import org.apache.kafka.common.record.internal.RecordBatch;
@@ -752,6 +756,8 @@ public class Sender implements Runnable {
         this.accumulator.reenqueue(batch, currentTimeMs);
         maybeRemoveFromInflightBatches(batch);
         this.sensors.recordRetries(batch.topicPartition.topic(), batch.recordCount);
+        // Change to use dynamic backoff when implemented from exp.
+        this.sensors.recordRetryBackoff(this.retryBackoffMs);
     }
 
     private void completeBatch(ProducerBatch batch, ProduceResponse.PartitionResponse response) {
@@ -760,6 +766,7 @@ public class Sender implements Runnable {
         }
 
         if (batch.complete(response.baseOffset, response.logAppendTime)) {
+        	this.sensors.recordSuccessfulBatch(batch.recordCount);
             maybeRemoveAndDeallocateBatch(batch);
         } else {
             // Always safe to call deallocate because the batch keeps track of whether or not it was deallocated yet
@@ -945,6 +952,7 @@ public class Sender implements Runnable {
         ClientRequest clientRequest = client.newClientRequest(nodeId, requestBuilder, now, acks != 0,
                 requestTimeoutMs, callback);
         client.send(clientRequest, now);
+        this.sensors.produceRequestSensor.record(1, now);
         log.trace("Sent produce request to {}: {}", nodeId, requestBuilder);
     }
 
@@ -983,8 +991,14 @@ public class Sender implements Runnable {
         public final Sensor batchSizeSensor;
         public final Sensor compressionRateSensor;
         public final Sensor maxRecordSizeSensor;
+        public final Sensor produceRequestSensor;
         public final Sensor batchSplitSensor;
-        private final SenderMetricsRegistry metrics;
+        public final Sensor retryBackoffSensor;
+        
+        private volatile long totalRetryCount = 0;
+        private volatile long totalSuccessCount = 0;
+        
+        protected final SenderMetricsRegistry metrics;
         private final Time time;
 
         public SenderMetrics(SenderMetricsRegistry metrics, Metadata metadata, KafkaClient client, Time time) {
@@ -1001,10 +1015,22 @@ public class Sender implements Runnable {
             this.queueTimeSensor = metrics.sensor("queue-time");
             this.queueTimeSensor.add(metrics.recordQueueTimeAvg, new Avg());
             this.queueTimeSensor.add(metrics.recordQueueTimeMax, new Max());
+            this.queueTimeSensor.add(new Percentiles(
+            	4 * 1024, // 4KB Bucket memory
+            	10_000, // 10,000 ms
+            	Percentiles.BucketSizing.CONSTANT,
+            	new Percentile(metrics.recordQueueTimeP99, 99.0)            		
+            ));
 
             this.requestTimeSensor = metrics.sensor("request-time");
             this.requestTimeSensor.add(metrics.requestLatencyAvg, new Avg());
             this.requestTimeSensor.add(metrics.requestLatencyMax, new Max());
+            this.requestTimeSensor.add(new Percentiles(
+                4 * 1024,   // 4KB bucket memory
+                30_000,     // max value: 30,000 ms
+                Percentiles.BucketSizing.CONSTANT,
+                new Percentile(metrics.requestLatencyP99, 99.0)
+            ));
 
             this.recordsPerRequestSensor = metrics.sensor("records-per-request");
             this.recordsPerRequestSensor.add(new Meter(metrics.recordSendRate, metrics.recordSendTotal));
@@ -1026,6 +1052,15 @@ public class Sender implements Runnable {
 
             this.batchSplitSensor = metrics.sensor("batch-split-rate");
             this.batchSplitSensor.add(new Meter(metrics.batchSplitRate, metrics.batchSplitTotal));
+            this.produceRequestSensor = metrics.sensor("produce-requests");
+            this.produceRequestSensor.add(new Meter(metrics.produceRequestRate, metrics.produceRequestTotal));
+            
+            this.retryBackoffSensor = metrics.sensor("retry-backoff");
+            this.retryBackoffSensor.add(metrics.retryBackoffAvg, new Avg());
+            this.retryBackoffSensor.add(metrics.retryBackoffMax, new Max());
+            
+            this.metrics.addMetric(metrics.retryAmplification,
+                    (config, now) -> totalSuccessCount == 0 ? 0.0 : (double) totalRetryCount / totalSuccessCount);
         }
 
         private void maybeRegisterTopicMetrics(String topic) {
@@ -1104,6 +1139,7 @@ public class Sender implements Runnable {
         public void recordRetries(String topic, int count) {
             long now = time.milliseconds();
             this.retrySensor.record(count, now);
+            this.totalRetryCount += count;
             String topicRetryName = "topic." + topic + ".record-retries";
             Sensor topicRetrySensor = this.metrics.getSensor(topicRetryName);
             if (topicRetrySensor != null)
@@ -1129,6 +1165,15 @@ public class Sender implements Runnable {
                     nodeRequestTime.record(latency, now);
             }
         }
+        
+        public void recordRetryBackoff(long backoffMs) {
+            this.retryBackoffSensor.record(backoffMs, time.milliseconds());
+        }
+ 
+        public void recordSuccessfulBatch(int recordCount) {
+            this.totalSuccessCount += recordCount;
+        }
+        
 
         void recordBatchSplit() {
             this.batchSplitSensor.record();

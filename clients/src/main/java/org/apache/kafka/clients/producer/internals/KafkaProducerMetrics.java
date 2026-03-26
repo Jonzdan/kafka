@@ -36,6 +36,8 @@ public class KafkaProducerMetrics implements AutoCloseable {
     private static final String TXN_PREPARE = "txn-prepare";
     private static final String TOTAL_TIME_SUFFIX = "-time-ns-total";
     private static final String METADATA_WAIT = "metadata-wait";
+    private static final String RETRY_BACKOFF = "retry-backoff";
+    private static final String RETRY_ATTEMPT = "retry-attempt";
 
     private final Map<String, String> tags;
     private final Metrics metrics;
@@ -47,6 +49,8 @@ public class KafkaProducerMetrics implements AutoCloseable {
     private final Sensor abortTxnSensor;
     private final Sensor prepareTxnSensor;
     private final Sensor metadataWaitSensor;
+    private final Sensor retryBackoffSensor;
+    private final Sensor retryAttemptsSensor;
 
     public KafkaProducerMetrics(Metrics metrics) {
         this.metrics = metrics;
@@ -83,6 +87,14 @@ public class KafkaProducerMetrics implements AutoCloseable {
             METADATA_WAIT,
             "Total time producer has spent waiting on topic metadata in nanoseconds."
         );
+        retryBackoffSensor = newLatencySensor(
+            RETRY_BACKOFF,
+            "Total time producer spent backing off retries."
+        );
+        retryAttemptsSensor = newLatencySensor(
+            RETRY_ATTEMPT,
+            "Total retry attempts."
+        );
     }
 
     @Override
@@ -95,6 +107,8 @@ public class KafkaProducerMetrics implements AutoCloseable {
         removeMetric(TXN_ABORT);
         removeMetric(TXN_PREPARE);
         removeMetric(METADATA_WAIT);
+        removeMetric(RETRY_ATTEMPT);
+        removeMetric(RETRY_BACKOFF);
     }
 
     public void recordFlush(long duration) {
@@ -127,6 +141,14 @@ public class KafkaProducerMetrics implements AutoCloseable {
 
     public void recordMetadataWait(long duration) {
         metadataWaitSensor.record(duration);
+    }
+
+    public void recordRetryBackoff(long duration) {
+        retryBackoffSensor.record(duration);
+    }
+
+    public void recordRetryAttempt(int attempt) {
+        retryAttemptsSensor.record(attempt);
     }
 
     private Sensor newLatencySensor(String name, String description) {

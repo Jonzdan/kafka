@@ -40,7 +40,9 @@ public class SenderMetricsRegistry {
     public final MetricName recordQueueTimeAvg;
     public final MetricName recordQueueTimeMax;
     public final MetricName requestLatencyAvg;
-    public final MetricName requestLatencyMax;   
+    public final MetricName requestLatencyMax;
+    public final MetricName requestLatencyP99;
+    public final MetricName recordQueueTimeP99;
     public final MetricName produceThrottleTimeAvg;
     public final MetricName produceThrottleTimeMax;
     public final MetricName recordSendRate;
@@ -53,9 +55,15 @@ public class SenderMetricsRegistry {
     public final MetricName recordSizeMax;
     public final MetricName recordSizeAvg;
     public final MetricName requestsInFlight;
+    public final MetricName retryBackoffAvg;
+    public final MetricName retryBackoffMax;
+    public final MetricName retryAttemptsAvg;
+    public final MetricName retryAmplification;
     public final MetricName metadataAge;
     public final MetricName batchSplitRate;
     public final MetricName batchSplitTotal;
+    public final MetricName produceRequestRate;
+    public final MetricName produceRequestTotal;
 
     private final MetricNameTemplate topicRecordSendRate;
     private final MetricNameTemplate topicRecordSendTotal;
@@ -89,10 +97,14 @@ public class SenderMetricsRegistry {
                 "The average time in ms record batches spent in the send buffer.");
         this.recordQueueTimeMax = createMetricName("record-queue-time-max",
                 "The maximum time in ms record batches spent in the send buffer.");
+        this.recordQueueTimeP99 = createMetricName("record-queue-time-p99",
+                "The 99th percentile time in ms record batches spent in the send buffer.");
         this.requestLatencyAvg = createMetricName("request-latency-avg", 
                 "The average request latency in ms");
         this.requestLatencyMax = createMetricName("request-latency-max", 
                 "The maximum request latency in ms");
+        this.requestLatencyP99 = createMetricName("request-latency-p99",
+                "The 99th percentile request latency in ms.");
         this.recordSendRate = createMetricName("record-send-rate", 
                 "The average number of records sent per second.");
         this.recordSendTotal = createMetricName("record-send-total", 
@@ -113,12 +125,24 @@ public class SenderMetricsRegistry {
                 "The average record size");
         this.requestsInFlight = createMetricName("requests-in-flight",
                 "The current number of in-flight requests awaiting a response.");
+        this.retryBackoffAvg = createMetricName("retry-backoff-avg",
+            "Average retry backoff duration in ms.");
+        this.retryBackoffMax = createMetricName("retry-backoff-max",
+            "Maximum retry backoff duration in ms.");
+        this.retryAttemptsAvg = createMetricName("retry-attempts-avg",
+            "Average retry attempts per successful record.");
+        this.retryAmplification = createMetricName("retry-amplification-factor",
+            "Total retries divided by successful sends.");
         this.metadataAge = createMetricName("metadata-age",
                 "The age in seconds of the current producer metadata being used.");
         this.batchSplitRate = createMetricName("batch-split-rate", 
                 "The average number of batch splits per second");
         this.batchSplitTotal = createMetricName("batch-split-total", 
                 "The total number of batch splits");
+        this.produceRequestRate = createMetricName("produce-request-rate",
+                "The average number of produce requests sent to brokers per second.");
+        this.produceRequestTotal = createMetricName("produce-request-total",
+                "The total number of produce requests sent to brokers.");
 
         this.produceThrottleTimeAvg = createMetricName("produce-throttle-time-avg",
                 "The average time in ms a request was throttled by a broker");
@@ -196,6 +220,7 @@ public class SenderMetricsRegistry {
     public MetricName topicRecordErrorTotal(Map<String, String> tags) {
         return this.metrics.metricInstance(this.topicRecordErrorTotal, tags);
     }
+ 
 
     public List<MetricNameTemplate> allTemplates() {
         return allTemplates;

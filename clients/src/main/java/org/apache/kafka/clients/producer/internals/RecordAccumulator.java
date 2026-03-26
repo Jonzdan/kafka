@@ -210,6 +210,11 @@ public class RecordAccumulator {
             metrics.metricName("buffer-available-bytes", metricGrpName,
                 "The total amount of buffer memory that is not being used (either unallocated or in the free list)."),
             (config, now) -> free.availableMemory());
+
+        metrics.addMetric(
+        	metrics.metricName("record-queue-depth", metricGrpName,
+            		"The current number of records waiting in sender queue"),
+        	(config, now) -> this.getQueueDepth());
     }
 
     private void setPartition(AppendCallbacks callbacks, int partition) {
@@ -537,6 +542,20 @@ public class RecordAccumulator {
             }
         }
         return numSplitBatches;
+    }
+
+    private int getQueueDepth() {
+    	int total = 0;
+    	for (TopicInfo topicInfo : this.topicInfoMap.values()) {
+    		for (Deque<ProducerBatch> deque : topicInfo.batches.values()) {
+    			synchronized (deque) {
+    				for (ProducerBatch b: deque) {
+    					total += b.recordCount;
+    				}
+    			}
+    		}
+    	}
+    	return total;
     }
 
     // We will have to do extra work to ensure the queue is in order when requests are being retried and there are
